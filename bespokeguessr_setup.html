@@ -1,0 +1,1439 @@
+<!--
+  BespokeGuessr — Custom Map Training Game
+  Copyright (C) 2026
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU Affero General Public License for more details.
+
+  You should have received a copy of the GNU Affero General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BespokeGuessr — Custom Map Training</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0a0b0d;
+    --surface: #111318;
+    --surface2: #1a1d24;
+    --border: #2a2d36;
+    --accent: #e8c84a;
+    --accent2: #4ae8a0;
+    --danger: #e84a4a;
+    --text: #e8e8e8;
+    --muted: #666b7a;
+    --radius: 4px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* HEADER */
+  .header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px; color: var(--accent); }
+  .logo span { color: var(--text); }
+  .header-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 1px; margin-left: auto; }
+
+  /* BUTTONS */
+  .btn {
+    font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 1px;
+    text-transform: uppercase; padding: 10px 20px;
+    border: 1px solid var(--border); background: transparent; color: var(--text);
+    cursor: pointer; border-radius: var(--radius); transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); color: #0a0b0d; border-color: var(--accent); font-weight: 500; }
+  .btn-primary:hover { background: #f0d45a; color: #0a0b0d; border-color: #f0d45a; }
+  .btn-danger { border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: var(--danger); color: white; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); color: var(--text); background: transparent; }
+
+  /* ===================== SETUP SCREEN ===================== */
+  #screen-setup { flex-direction: column; height: 100vh; overflow: hidden; }
+
+  .setup-body {
+    flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow-y: auto; min-height: 0;
+  }
+  .setup-panel {
+    padding: 28px 32px; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 16px; overflow-y: auto; min-height: 0;
+  }
+  .setup-panel:last-child { border-right: none; }
+
+  .panel-title { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; color: var(--accent); }
+  .panel-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  /* DROP ZONES */
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 28px; text-align: center; cursor: pointer; transition: all 0.2s;
+    position: relative; background: var(--surface2);
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(232,200,74,0.04); }
+  .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 28px; margin-bottom: 6px; }
+  .drop-label { font-size: 13px; color: var(--muted); }
+  .drop-label strong { color: var(--text); }
+
+  /* MAP PREVIEW */
+  #map-preview-wrap { display: none; }
+  #map-preview { width: 100%; border-radius: var(--radius); border: 1px solid var(--border); display: block; }
+  .map-loaded-tag { margin-top: 6px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent2); }
+
+  /* LOCATION LIST */
+  .location-list { display: flex; flex-direction: column; gap: 8px; }
+  .loc-empty { text-align: center; padding: 20px; color: var(--muted); font-size: 12px; font-family: 'DM Mono', monospace; }
+
+  .loc-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 8px 12px;
+  }
+  .loc-thumb { width: 52px; height: 38px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+  .loc-name { flex: 1; font-size: 12px; font-family: 'DM Mono', monospace; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loc-check { color: var(--accent2); font-size: 13px; }
+  .loc-place-btn {
+    font-family: 'DM Mono', monospace; font-size: 10px; color: var(--accent);
+    border: 1px solid var(--accent); background: none; padding: 3px 8px;
+    border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .loc-place-btn:hover { background: var(--accent); color: #0a0b0d; }
+  .loc-place-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .loc-place-btn:disabled:hover { background: none; color: var(--accent); }
+  .loc-del { color: var(--danger); cursor: pointer; background: none; border: none; padding: 2px 6px; font-size: 16px; line-height: 1; flex-shrink: 0; }
+  .loc-del:hover { color: #ff6b6b; }
+
+  .counts-row { display: flex; align-items: center; gap: 8px; }
+  .tag { display: inline-block; font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 2px; border: 1px solid var(--border); color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ACTION BAR */
+  .action-bar {
+    padding: 16px 32px; border-top: 1px solid var(--border);
+    background: var(--surface); display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+  .action-bar .status { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-left: auto; }
+
+  /* ===================== PLACE MODAL ===================== */
+  #place-modal {
+    display: none;
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.88);
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  #place-modal.open { display: flex; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 100%; max-width: 820px;
+    display: flex; flex-direction: column;
+    /* Fill available height so the image body can use all remaining space */
+    height: 90vh;
+    min-height: 0;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+    flex-shrink: 0;
+  }
+  .modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 2px; color: var(--accent); }
+  .modal-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .modal-body {
+    position: relative;
+    cursor: crosshair;
+    background: #000;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #modal-panzoom {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    transform-origin: 0 0;
+  }
+  #modal-map-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    user-select: none;
+  }
+  #game-panzoom {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    transform-origin: 0 0;
+  }
+  .modal-pin {
+    position: absolute;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  }
+  .modal-pin.existing { width: 10px; height: 10px; background: var(--muted); }
+  .modal-pin.pending { width: 16px; height: 16px; background: var(--accent); box-shadow: 0 0 0 5px rgba(232,200,74,0.2), 0 2px 8px rgba(0,0,0,0.6); }
+
+  .modal-footer {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  .modal-hint { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); flex: 1; }
+
+  /* ===================== GAME SCREEN ===================== */
+  #screen-game { flex-direction: column; height: 100vh; overflow: hidden; }
+  .game-layout { flex: 1; display: flex; overflow: hidden; }
+
+  .screenshot-panel { position: relative; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; flex: 1; min-width: 200px; }
+  #game-screenshot { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  .screenshot-overlay {
+    position: absolute; top: 16px; left: 16px;
+    background: rgba(10,11,13,0.85); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 8px 14px;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted);
+  }
+  .screenshot-overlay strong { color: var(--accent); font-size: 20px; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; display: block; }
+
+  .game-sidebar { display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--border); overflow: visible; flex-shrink: 0; width: 380px; min-width: 200px; max-width: 70%; }
+  .sidebar-map-wrap { flex: 1; position: relative; overflow: hidden; cursor: crosshair; background: #000; }
+  #game-map-img { width: 100%; height: 100%; display: block; pointer-events: none; }
+
+  .map-pin {
+    position: absolute; border-radius: 50%; border: 2px solid white;
+    transform: translate(-50%, -50%); pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5); z-index: 10; display: none;
+  }
+  #guess-pin { width: 16px; height: 16px; background: var(--accent); }
+  #answer-pin { width: 14px; height: 14px; background: var(--accent2); z-index: 11; }
+  #answer-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; z-index: 9; }
+
+  .sidebar-footer { padding: 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; overflow: visible; }
+  .score-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .score-val { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 1px; color: var(--accent); }
+  .round-info { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+  .hint-text { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; text-align: center; padding: 4px 0; }
+
+  .result-reveal { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; display: none; }
+  .result-reveal .rdist { font-family: 'Bebas Neue', sans-serif; font-size: 30px; letter-spacing: 2px; color: var(--accent); display: block; line-height: 1; }
+  .result-reveal .rpts { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent2); margin-top: 4px; }
+  .result-reveal .rmsg { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* ===================== RESIZE HANDLE ===================== */
+  #resize-handle {
+    width: 6px;
+    flex-shrink: 0;
+    background: var(--border);
+    cursor: col-resize;
+    position: relative;
+    transition: background 0.15s;
+    z-index: 5;
+  }
+  #resize-handle:hover, #resize-handle.dragging { background: var(--accent); }
+  #resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 32px;
+    background: currentColor;
+    opacity: 0.4;
+    border-radius: 1px;
+  }
+
+  @media (max-width: 768px) {
+    .header { padding: 10px 16px; gap: 8px; }
+    .header-sub { display: none; }
+    .game-layout { flex-direction: column; }
+    .screenshot-panel { min-width: unset; min-height: 120px; }
+    .game-sidebar {
+      width: 100%; min-width: unset; max-width: unset;
+      height: 45vh; min-height: 150px; max-height: 80vh;
+      border-left: none; border-top: 1px solid var(--border);
+    }
+    #resize-handle {
+      width: 100%; height: 6px;
+      cursor: row-resize;
+    }
+    #resize-handle::after {
+      width: 32px; height: 2px;
+    }
+    .results-card { min-width: unset; width: 100%; padding: 28px 20px; border-radius: 0; }
+    .results-score-big { font-size: 56px; }
+  }
+
+  /* ===================== RESULTS SCREEN ===================== */
+  #screen-results { align-items: center; justify-content: center; }
+  .results-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 48px; min-width: 480px; max-width: 600px; text-align: center; }
+  .results-title { font-family: 'Bebas Neue', sans-serif; font-size: 48px; letter-spacing: 4px; color: var(--accent); line-height: 1; margin-bottom: 4px; }
+  .results-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 24px; }
+  .results-score-big { font-family: 'Bebas Neue', sans-serif; font-size: 80px; letter-spacing: 4px; line-height: 1; }
+  .results-score-denom { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--muted); margin-top: 4px; margin-bottom: 28px; }
+  .results-breakdown { display: flex; flex-direction: column; gap: 8px; text-align: left; margin-bottom: 28px; }
+  .breakdown-row { display: flex; align-items: center; gap: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
+  .breakdown-thumb { width: 48px; height: 36px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+  .breakdown-info { flex: 1; }
+  .breakdown-name { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--text); }
+  .breakdown-dist { font-size: 11px; color: var(--muted); }
+  .breakdown-pts { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1px; color: var(--accent); }
+  .results-actions { display: flex; gap: 12px; justify-content: center; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  #toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px;
+    padding: 10px 20px; border-radius: var(--radius); z-index: 9999;
+    transition: transform 0.25s ease; pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<!-- ===================== PLACE MODAL ===================== -->
+<div id="place-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Mark Location on Map</div>
+        <div class="modal-sub" id="modal-sub">Click the map to pin where this image was taken</div>
+      </div>
+      <button class="btn" onclick="closeModal()" style="margin-left:auto;padding:6px 14px;">Cancel</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div id="modal-panzoom">
+        <img id="modal-map-img" src="" alt="Map">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-hint" id="modal-hint">Scroll to zoom · Drag to pan · Double-click to place pin</div>
+      <button class="btn" onclick="clearModalPin()" style="padding:8px 14px;">Reset</button>
+      <button class="btn btn-primary" id="modal-confirm-btn" onclick="confirmPlace()" style="display:none;">Confirm ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SETUP SCREEN ===================== -->
+<div id="screen-setup" class="screen active">
+  <div class="header">
+    <div class="logo">Bespoke<span>Guessr</span></div>
+    <div class="header-sub">Location Guessing Game — Runs Locally</div>
+  </div>
+
+  <div class="setup-body">
+    <!-- LEFT: MAP -->
+    <div class="setup-panel">
+      <div class="panel-title">01 — Map Image</div>
+      <div class="panel-desc">Upload your map image. Players will click this to make their guesses.</div>
+
+      <div class="drop-zone" id="map-drop">
+        <input type="file" id="map-file" accept="image/*">
+        <div class="drop-icon">🗺️</div>
+        <div class="drop-label"><strong>Click or drag</strong> a map image here<br><span style="font-size:11px">PNG, JPG, WEBP</span></div>
+      </div>
+
+      <div id="map-preview-wrap">
+        <img id="map-preview" src="" alt="Map preview">
+        <div class="map-loaded-tag">✓ Map loaded</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: LOCATIONS -->
+    <div class="setup-panel">
+      <div class="panel-title">02 — Locations</div>
+      <div class="panel-desc">Upload location images. Use the Place button on each one to mark it on the map. Add at least 3.</div>
+
+      <div class="drop-zone" id="screenshot-drop">
+        <input type="file" id="screenshot-file" accept="image/*" multiple>
+        <div class="drop-icon">🖼️</div>
+        <div class="drop-label"><strong>Click or drag</strong> location images here<br><span style="font-size:11px">Multiple files supported</span></div>
+      </div>
+
+      <div class="drop-zone" id="coords-drop" style="padding:12px 20px;display:flex;align-items:center;gap:10px;text-align:left;">
+        <input type="file" id="coords-file" accept=".json">
+        <span style="font-size:18px;flex-shrink:0;">📋</span>
+        <div class="drop-label" style="text-align:left"><strong>Load coordinates</strong> (optional)<br><span style="font-size:10px">Drop a .json file exported from a previous session</span></div>
+      </div>
+
+      <div class="location-list" id="location-list">
+        <div class="loc-empty">No locations yet — upload some images</div>
+      </div>
+
+      <div class="counts-row">
+        <span class="tag" id="loc-count-tag">0 locations</span>
+        <span class="tag" id="placed-count-tag">0 placed</span>
+        <span style="flex:1"></span>
+        <button class="btn" id="export-coords-btn" onclick="exportCoords()" style="padding:6px 12px;font-size:11px;" disabled>⬇ Save Coords</button>
+        <button class="btn btn-danger" onclick="clearAll()" style="padding:6px 12px;font-size:11px;">Clear All</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn btn-primary" id="start-btn" onclick="startGame()" disabled>Start Game →</button>
+    <button class="btn" id="export-btn" onclick="exportPreset()" disabled style="margin-left:auto;">⬇ Export Preset</button>
+    <div class="status" id="setup-status">Upload a map and at least 3 placed locations to begin</div>
+  </div>
+</div>
+
+<!-- ===================== GAME SCREEN ===================== -->
+<div id="screen-game" class="screen">
+  <div class="header" style="padding:12px 24px;">
+    <div class="logo" style="font-size:20px;">Bespoke<span>Guessr</span></div>
+    <div style="flex:1;display:flex;align-items:center;gap:16px;margin-left:24px;">
+      <span class="round-info" id="game-round-label">Round 1 / 5</span>
+      <div style="flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;">
+        <div id="progress-bar" style="height:100%;background:var(--accent);border-radius:2px;transition:width 0.4s ease;width:0%"></div>
+      </div>
+    </div>
+    <div style="margin-left:16px;text-align:right;">
+      <div class="score-label">Total Score</div>
+      <div class="score-val" id="header-score">0</div>
+    </div>
+    <button class="btn" data-hide-in-preset onclick="backToSetup()" style="margin-left:16px;padding:6px 14px;font-size:11px;">✕ Exit</button>
+  </div>
+
+  <div class="game-layout">
+    <div class="screenshot-panel">
+      <img id="game-screenshot" src="" alt="Location screenshot">
+      <div class="screenshot-overlay">
+        <strong id="round-num-big">1</strong>
+        Where is this?
+      </div>
+    </div>
+
+    <div id="resize-handle"></div>
+    <div class="game-sidebar">
+      <div class="sidebar-map-wrap" id="sidebar-map-wrap">
+        <div id="game-panzoom">
+          <img id="game-map-img" src="" alt="Map">
+        </div>
+        <div id="guess-pin" class="map-pin"></div>
+        <div id="answer-pin" class="map-pin"></div>
+        <canvas id="answer-canvas"></canvas>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="hint-text" id="map-hint">Drag to pan · Tap to place pin</div>
+
+        <div class="result-reveal" id="result-reveal">
+          <span class="rdist" id="result-dist">—</span>
+          <div class="rpts" id="result-pts">+0 points</div>
+          <div class="rmsg" id="result-msg"></div>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" id="guess-btn" onclick="submitGuess()" disabled style="flex:1;">Guess →</button>
+          <button class="btn" id="next-btn" onclick="nextRound()" style="display:none;flex:1;">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== RESULTS SCREEN ===================== -->
+<div id="screen-results" class="screen">
+  <div class="results-card">
+    <div class="results-title">Results</div>
+    <div class="results-sub" id="results-sub">Round complete</div>
+    <div class="results-score-big" id="results-total">0</div>
+    <div class="results-score-denom" id="results-denom">out of 5000</div>
+    <div class="results-breakdown" id="results-breakdown"></div>
+    <div class="results-actions">
+      <button class="btn btn-primary" onclick="playAgain()">Play Again</button>
+      <button class="btn" data-hide-in-preset onclick="backToSetup()">← Edit Locations</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+let mapDataUrl = null;
+let locations = [];
+let nextId = 1;
+
+// Modal state
+let modalPendingId = null;
+let modalTempX = null;
+let modalTempY = null;
+
+// Game state
+let gameLocations = [];
+let currentRound = 0;
+let totalScore = 0;
+let roundScores = [];
+let currentGuess = null;
+let guessSubmitted = false;
+
+const MAX_SCORE = 1000;
+
+// ===================== PAN/ZOOM MAP VIEWER =====================
+// Manages pan & zoom for a container+panzoom-div+image trio.
+// All pin coordinates remain as 0-1 fractions of the natural image.
+class MapViewer {
+  constructor(container, panzoomEl, imgEl) {
+    this.container = container;
+    this.el        = panzoomEl;
+    this.img       = imgEl;
+    this.scale     = 1;
+    this.ox        = 0; // offset of panzoom el origin within container (px)
+    this.oy        = 0;
+    this._dragging = false;
+    this._lastX    = 0;
+    this._lastY    = 0;
+    this._onResize = null;
+    this._bind();
+  }
+
+  // Call after the image loads / container is shown to fit image to container
+  fitToContainer() {
+    const cr  = this.container.getBoundingClientRect();
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    if (!nat.w || !nat.h || !cr.width || !cr.height) return;
+    const scaleToFit = Math.min(cr.width / nat.w, cr.height / nat.h);
+    this.scale = scaleToFit;
+    this.ox    = (cr.width  - nat.w * scaleToFit) / 2;
+    this.oy    = (cr.height - nat.h * scaleToFit) / 2;
+    this._apply();
+  }
+
+  // Convert a container-relative point to image-fraction coords
+  toFraction(cx, cy) {
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    const ix  = (cx - this.ox) / this.scale;
+    const iy  = (cy - this.oy) / this.scale;
+    return { x: ix / nat.w, y: iy / nat.h };
+  }
+
+  // Convert image-fraction coords to container-relative px
+  toPixel(fx, fy) {
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    return {
+      x: this.ox + fx * nat.w * this.scale,
+      y: this.oy + fy * nat.h * this.scale
+    };
+  }
+
+  _apply() {
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    // Set the panzoom div to natural image size, then scale+translate it
+    this.el.style.width  = nat.w + 'px';
+    this.el.style.height = nat.h + 'px';
+    this.el.style.transform = `translate(${this.ox}px, ${this.oy}px) scale(${this.scale})`;
+  }
+
+  _clampOffset() {
+    const cr   = this.container.getBoundingClientRect();
+    const nat  = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    const iw   = nat.w * this.scale;
+    const ih   = nat.h * this.scale;
+    // Allow panning up to the edge — keep at least a sliver visible
+    const margin = 40;
+    this.ox = Math.min(this.ox, cr.width  - margin);
+    this.ox = Math.max(this.ox, margin - iw);
+    this.oy = Math.min(this.oy, cr.height - margin);
+    this.oy = Math.max(this.oy, margin - ih);
+  }
+
+  _bind() {
+    const c = this.container;
+
+    // Scroll to zoom
+    c.addEventListener('wheel', e => {
+      e.preventDefault();
+      const cr    = c.getBoundingClientRect();
+      const mouseX = e.clientX - cr.left;
+      const mouseY = e.clientY - cr.top;
+      const delta  = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const newScale = Math.min(Math.max(this.scale * delta, 0.2), 20);
+      // Zoom toward mouse position
+      this.ox = mouseX - (mouseX - this.ox) * (newScale / this.scale);
+      this.oy = mouseY - (mouseY - this.oy) * (newScale / this.scale);
+      this.scale = newScale;
+      this._clampOffset();
+      this._apply();
+      if (this._onZoomPan) this._onZoomPan();
+    }, { passive: false });
+
+    // Drag to pan
+    c.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      this._dragging  = true;
+      this._lastX     = e.clientX;
+      this._lastY     = e.clientY;
+      this._startX    = e.clientX;
+      this._startY    = e.clientY;
+      this._moved     = false;
+      // Don't switch cursor yet — wait until movement threshold is crossed
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!this._dragging) return;
+      const dx = e.clientX - this._lastX;
+      const dy = e.clientY - this._lastY;
+      // Only show grabbing cursor and start panning once 4px threshold is crossed
+      const totalDx = e.clientX - this._startX;
+      const totalDy = e.clientY - this._startY;
+      if (!this._moved && Math.sqrt(totalDx * totalDx + totalDy * totalDy) > 4) {
+        this._moved = true;
+        c.style.cursor = 'grabbing';
+      }
+      if (!this._moved) return; // don't pan until threshold crossed
+      this.ox += dx;
+      this.oy += dy;
+      this._lastX = e.clientX;
+      this._lastY = e.clientY;
+      this._clampOffset();
+      this._apply();
+      if (this._onZoomPan) this._onZoomPan();
+    });
+    document.addEventListener('mouseup', e => {
+      if (!this._dragging) return;
+      this._dragging = false;
+      this._moved    = false;
+      c.style.cursor = 'crosshair';
+    });
+
+    // Double-click to place pin
+    c.addEventListener('dblclick', e => {
+      const cr = c.getBoundingClientRect();
+      const cx = e.clientX - cr.left;
+      const cy = e.clientY - cr.top;
+      const f  = this.toFraction(cx, cy);
+      if (f.x < 0 || f.y < 0 || f.x > 1 || f.y > 1) return;
+      if (this._onPlace) this._onPlace(f.x, f.y);
+    });
+
+    // Touch: single-finger pan, two-finger pinch-zoom, tap to place pin
+    let _pinchDist = null;
+    c.addEventListener('touchstart', e => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        this._dragging = true;
+        this._lastX  = e.touches[0].clientX;
+        this._lastY  = e.touches[0].clientY;
+        this._startX = e.touches[0].clientX;
+        this._startY = e.touches[0].clientY;
+        this._moved  = false;
+      } else if (e.touches.length === 2) {
+        this._dragging = false;
+        _pinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    }, { passive: false });
+
+    c.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (e.touches.length === 1 && this._dragging) {
+        const dx = e.touches[0].clientX - this._lastX;
+        const dy = e.touches[0].clientY - this._lastY;
+        if (!this._moved && Math.hypot(
+          e.touches[0].clientX - this._startX,
+          e.touches[0].clientY - this._startY
+        ) > 4) this._moved = true;
+        if (this._moved) {
+          this.ox += dx; this.oy += dy;
+          this._clampOffset(); this._apply();
+          if (this._onZoomPan) this._onZoomPan();
+        }
+        this._lastX = e.touches[0].clientX;
+        this._lastY = e.touches[0].clientY;
+      } else if (e.touches.length === 2 && _pinchDist !== null) {
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const cr   = c.getBoundingClientRect();
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - cr.left;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - cr.top;
+        const ratio = dist / _pinchDist;
+        const newScale = Math.min(Math.max(this.scale * ratio, 0.2), 20);
+        this.ox = midX - (midX - this.ox) * (newScale / this.scale);
+        this.oy = midY - (midY - this.oy) * (newScale / this.scale);
+        this.scale = newScale;
+        _pinchDist = dist;
+        this._clampOffset(); this._apply();
+        if (this._onZoomPan) this._onZoomPan();
+      }
+    }, { passive: false });
+
+    c.addEventListener('touchend', e => {
+      if (this._dragging && !this._moved) {
+        const cr    = c.getBoundingClientRect();
+        const touch = e.changedTouches[0];
+        const f     = this.toFraction(touch.clientX - cr.left, touch.clientY - cr.top);
+        if (f.x >= 0 && f.y >= 0 && f.x <= 1 && f.y <= 1) {
+          if (this._onPlace) this._onPlace(f.x, f.y);
+        }
+      }
+      this._dragging = false;
+      this._moved    = false;
+      _pinchDist     = null;
+    });
+  }
+
+  // Register callbacks
+  onPlace(fn)   { this._onPlace   = fn; }
+  onZoomPan(fn) { this._onZoomPan = fn; }
+
+  // Re-fit when container resizes (call from ResizeObserver)
+  onContainerResize() {
+    // Keep the image fitted but preserve zoom level if user has zoomed in
+    if (this.scale <= this._fitScale() * 1.01) {
+      this.fitToContainer();
+    } else {
+      this._clampOffset();
+      this._apply();
+    }
+  }
+
+  _fitScale() {
+    const cr  = this.container.getBoundingClientRect();
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    if (!nat.w || !cr.width) return 1;
+    return Math.min(cr.width / nat.w, cr.height / nat.h);
+  }
+}
+
+// ===================== FILE LOADING =====================
+
+document.getElementById('map-file').addEventListener('change', e => {
+  if (e.target.files[0]) loadMapFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+document.getElementById('screenshot-file').addEventListener('change', e => {
+  Array.from(e.target.files).forEach(addScreenshot);
+  e.target.value = '';
+});
+
+setupDrop('map-drop', file => loadMapFile(file));
+setupDrop('screenshot-drop', file => addScreenshot(file), true);
+setupDrop('coords-drop', file => loadCoordsFile(file), false, f => f.name.endsWith('.json'));
+
+document.getElementById('coords-file').addEventListener('change', e => {
+  if (e.target.files[0]) loadCoordsFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+// The input[type=file] sits on top of coords-drop and intercepts drag events.
+// Handle drag directly on the input so e.dataTransfer.files is always populated.
+(function() {
+  const input = document.getElementById('coords-file');
+  const zone  = document.getElementById('coords-drop');
+  input.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  input.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
+  input.addEventListener('drop', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    zone.classList.remove('drag-over');
+    const file = Array.from(e.dataTransfer.files).find(f => f.name.endsWith('.json'));
+    if (file) loadCoordsFile(file);
+  });
+})();
+
+function loadMapFile(file) {
+  if (!file.type.startsWith('image/')) return toast('Please upload an image file');
+  fileToDataUrl(file, url => {
+    mapDataUrl = url;
+    document.getElementById('map-preview').src = url;
+    document.getElementById('map-preview-wrap').style.display = 'block';
+    document.getElementById('modal-map-img').src = url;
+    document.getElementById('game-map-img').src = url;
+    updateSetupUI();
+    renderLocationList();
+    toast('Map loaded ✓');
+  });
+}
+
+function addScreenshot(file) {
+  if (!file.type.startsWith('image/')) return;
+  const name = file.name.replace(/\.[^.]+$/, '');
+  // Reject duplicates by filename
+  if (locations.some(l => l.name === name)) {
+    toast(`"${name}" already added`);
+    return;
+  }
+  fileToDataUrl(file, url => {
+    const id = nextId++;
+    // Prepend so newest appears at the top
+    locations.unshift({ id, name, filename: file.name, dataUrl: url, x: null, y: null, placed: false });
+    renderLocationList();
+    updateSetupUI();
+    toast(`"${name}" added — use Place to mark it on the map`);
+  });
+}
+
+// ===================== COORDINATES SAVE / LOAD =====================
+
+function exportCoords() {
+  const placed = locations.filter(l => l.placed);
+  if (placed.length === 0) return;
+
+  // Simple format: filename -> {x, y} fractions
+  const data = {};
+  placed.forEach(l => { data[l.name] = { image: l.filename, x: l.x, y: l.y }; });
+
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'locations.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast(`Saved ${placed.length} location${placed.length !== 1 ? 's' : ''} ✓`);
+}
+
+function loadCoordsFile(file) {
+  if (!file.name.endsWith('.json')) return toast('Please upload a .json file');
+  const reader = new FileReader();
+  reader.onload = e => {
+    let data;
+    try { data = JSON.parse(e.target.result); }
+    catch { return toast('Could not parse JSON file'); }
+
+    let matched = 0, skipped = 0;
+    locations.forEach(loc => {
+      if (data[loc.name]) {
+        const { x, y } = data[loc.name];
+        if (typeof x === 'number' && typeof y === 'number') {
+          loc.x = x; loc.y = y; loc.placed = true;
+          matched++;
+        }
+      } else {
+        skipped++;
+      }
+    });
+
+    renderLocationList();
+    updateSetupUI();
+    const msg = skipped > 0
+      ? `Loaded ${matched} location${matched !== 1 ? 's' : ''} (${skipped} not matched)`
+      : `Loaded ${matched} location${matched !== 1 ? 's' : ''} ✓`;
+    toast(msg);
+  };
+  reader.readAsText(file);
+}
+
+// ===================== PLACEMENT MODAL =====================
+
+function openModal(locId) {
+  const loc = locations.find(l => l.id === locId);
+  if (!loc || !mapDataUrl) return;
+
+  modalPendingId = locId;
+  modalTempX = null;
+  modalTempY = null;
+
+  document.getElementById('modal-sub').textContent = `"${loc.name}" — double-click the map to pin its location`;
+  document.getElementById('modal-hint').textContent = 'Scroll to zoom · Drag to pan · Double-click to place pin';
+  document.getElementById('modal-confirm-btn').style.display = 'none';
+  document.getElementById('modal-map-img').src = mapDataUrl;
+
+  // Clear old dynamic pins
+  const body = document.getElementById('modal-body');
+  body.querySelectorAll('.modal-pin').forEach(p => p.remove());
+
+  // Open the modal first so it has its final dimensions before we fit
+  document.getElementById('place-modal').classList.add('open');
+
+  const img = document.getElementById('modal-map-img');
+  const afterLoad = () => {
+    // Wait for the browser to paint the modal at its real size before fitting
+    requestAnimationFrame(() => {
+      modalViewer.fitToContainer();
+      locations.forEach(l => {
+        if (l.placed && l.id !== locId) placeModalPin(l.x, l.y, 'existing');
+      });
+    });
+  };
+  if (img.complete && img.naturalWidth) {
+    afterLoad();
+  } else {
+    img.onload = afterLoad;
+  }
+}
+
+function onModalPlace(fx, fy) {
+  if (!modalPendingId) return;
+  modalTempX = fx;
+  modalTempY = fy;
+
+  // Remove old pending pin and place new one
+  document.getElementById('modal-body').querySelectorAll('.modal-pin.pending').forEach(p => p.remove());
+  placeModalPin(fx, fy, 'pending');
+
+  document.getElementById('modal-hint').textContent = 'Pin placed — double-click to move, or confirm';
+  document.getElementById('modal-confirm-btn').style.display = '';
+}
+
+function placeModalPin(fx, fy, cls) {
+  const body = document.getElementById('modal-body');
+  const px   = modalViewer.toPixel(fx, fy);
+  const pin  = document.createElement('div');
+  pin.className = `modal-pin ${cls}`;
+  pin.style.left = px.x + 'px';
+  pin.style.top  = px.y + 'px';
+  body.appendChild(pin);
+}
+
+function repositionModalPins() {
+  const body = document.getElementById('modal-body');
+  // Re-pin the pending pin if placed
+  if (modalTempX !== null) {
+    body.querySelectorAll('.modal-pin.pending').forEach(p => p.remove());
+    placeModalPin(modalTempX, modalTempY, 'pending');
+  }
+  // Re-pin existing
+  body.querySelectorAll('.modal-pin.existing').forEach(p => p.remove());
+  locations.forEach(l => {
+    if (l.placed && l.id !== modalPendingId) placeModalPin(l.x, l.y, 'existing');
+  });
+}
+
+function clearModalPin() {
+  modalTempX = null;
+  modalTempY = null;
+  document.getElementById('modal-body').querySelectorAll('.modal-pin.pending').forEach(p => p.remove());
+  document.getElementById('modal-confirm-btn').style.display = 'none';
+  document.getElementById('modal-hint').textContent = 'Scroll to zoom · Drag to pan · Double-click to place pin';
+}
+
+function confirmPlace() {
+  if (modalTempX === null || !modalPendingId) return;
+  const loc = locations.find(l => l.id === modalPendingId);
+  if (loc) {
+    loc.x = modalTempX;
+    loc.y = modalTempY;
+    loc.placed = true;
+    toast(`"${loc.name}" placed ✓`);
+  }
+  closeModal();
+  renderLocationList();
+  updateSetupUI();
+}
+
+function closeModal() {
+  document.getElementById('place-modal').classList.remove('open');
+  modalPendingId = null;
+  modalTempX = null;
+  modalTempY = null;
+}
+
+// ===================== SETUP UI =====================
+
+function renderLocationList() {
+  const list = document.getElementById('location-list');
+  if (locations.length === 0) {
+    list.innerHTML = '<div class="loc-empty">No locations yet — upload some screenshots</div>';
+    return;
+  }
+  list.innerHTML = '';
+  locations.forEach(loc => {
+    const item = document.createElement('div');
+    item.className = 'loc-item';
+
+    const thumb = document.createElement('img');
+    thumb.className = 'loc-thumb';
+    thumb.src = loc.dataUrl;
+
+    const name = document.createElement('div');
+    name.className = 'loc-name';
+    name.title = loc.name;
+    name.textContent = loc.name;
+
+    item.appendChild(thumb);
+    item.appendChild(name);
+
+    if (loc.placed) {
+      const check = document.createElement('span');
+      check.className = 'loc-check';
+      check.textContent = '✓';
+
+      const moveBtn = document.createElement('button');
+      moveBtn.className = 'loc-place-btn';
+      moveBtn.textContent = 'move';
+      moveBtn.onclick = () => openModal(loc.id);
+
+      item.appendChild(check);
+      item.appendChild(moveBtn);
+    } else {
+      const placeBtn = document.createElement('button');
+      placeBtn.className = 'loc-place-btn';
+      placeBtn.textContent = mapDataUrl ? 'place →' : 'need map';
+      placeBtn.disabled = !mapDataUrl;
+      placeBtn.onclick = () => openModal(loc.id);
+      item.appendChild(placeBtn);
+    }
+
+    const del = document.createElement('button');
+    del.className = 'loc-del';
+    del.textContent = '×';
+    del.title = 'Remove';
+    del.onclick = () => {
+      locations = locations.filter(l => l.id !== loc.id);
+      renderLocationList();
+      updateSetupUI();
+    };
+    item.appendChild(del);
+
+    list.appendChild(item);
+  });
+}
+
+function updateSetupUI() {
+  const placed = locations.filter(l => l.placed);
+  document.getElementById('loc-count-tag').textContent = `${locations.length} location${locations.length !== 1 ? 's' : ''}`;
+  document.getElementById('placed-count-tag').textContent = `${placed.length} placed`;
+  const allPlaced = locations.length > 0 && placed.length === locations.length;
+  const canStart = mapDataUrl && allPlaced && locations.length >= 3;
+  document.getElementById('start-btn').disabled = !canStart;
+  document.getElementById('export-btn').disabled = !canStart;
+  document.getElementById('export-coords-btn').disabled = placed.length === 0;
+  const unplaced = locations.length - placed.length;
+  document.getElementById('setup-status').textContent = canStart
+    ? `Ready — ${locations.length} location${locations.length !== 1 ? 's' : ''} ready`
+    : !mapDataUrl
+      ? 'Upload a map to begin'
+      : locations.length < 3
+        ? `Add at least ${3 - locations.length} more location${3 - locations.length !== 1 ? 's' : ''}`
+        : unplaced > 0
+          ? `Place ${unplaced} remaining location${unplaced !== 1 ? 's' : ''} on the map`
+          : 'Add at least 3 locations';
+}
+
+function clearAll() {
+  if (!confirm('Remove all locations?')) return;
+  locations = [];
+  renderLocationList();
+  updateSetupUI();
+}
+
+
+// ===================== GAME =====================
+
+function startGame() {
+  const placed = locations.filter(l => l.placed);
+  if (!mapDataUrl || placed.length < 3) return;
+  gameLocations = [...placed].sort(() => Math.random() - 0.5);
+  currentRound = 0;
+  totalScore = 0;
+  roundScores = [];
+  document.getElementById('progress-bar').style.width = '0%';
+  showScreen('screen-game');
+  loadRound();
+}
+
+function loadRound() {
+  const loc = gameLocations[currentRound];
+  currentGuess = null;
+  guessSubmitted = false;
+
+  document.getElementById('game-screenshot').src = loc.dataUrl;
+  gameViewer.fitToContainer();
+  document.getElementById('round-num-big').textContent = currentRound + 1;
+  document.getElementById('game-round-label').textContent = `Round ${currentRound + 1} / ${gameLocations.length}`;
+  document.getElementById('header-score').textContent = totalScore;
+  document.getElementById('guess-btn').disabled = true;
+  document.getElementById('guess-btn').style.display = '';
+  document.getElementById('next-btn').style.display = 'none';
+  document.getElementById('result-reveal').style.display = 'none';
+  document.getElementById('map-hint').textContent = window.innerWidth <= 768
+    ? 'Pinch to zoom · Drag to pan · Tap to place pin'
+    : 'Scroll to zoom · Drag to pan · Double-click to place pin';
+  document.getElementById('guess-pin').style.display = 'none';
+  document.getElementById('answer-pin').style.display = 'none';
+  document.getElementById('answer-canvas').style.display = 'none';
+  document.getElementById('sidebar-map-wrap').style.cursor = 'crosshair';
+}
+
+function placePins() {
+  if (!currentGuess) return;
+
+  const gPx  = gameViewer.toPixel(currentGuess.x, currentGuess.y);
+  const gPin = document.getElementById('guess-pin');
+  gPin.style.left = gPx.x + 'px';
+  gPin.style.top  = gPx.y + 'px';
+
+  if (guessSubmitted) {
+    const loc = gameLocations[currentRound];
+    if (!loc) return;
+
+    const aPx  = gameViewer.toPixel(loc.x, loc.y);
+    const aPin = document.getElementById('answer-pin');
+    aPin.style.left = aPx.x + 'px';
+    aPin.style.top  = aPx.y + 'px';
+    aPin.style.display = 'block';
+
+    const wrap   = document.getElementById('sidebar-map-wrap');
+    const wr     = wrap.getBoundingClientRect();
+    const canvas = document.getElementById('answer-canvas');
+    canvas.width  = wr.width;
+    canvas.height = wr.height;
+    canvas.style.display = 'block';
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(74,232,160,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(gPx.x, gPx.y);
+    ctx.lineTo(aPx.x, aPx.y);
+    ctx.stroke();
+  }
+}
+
+function onGamePlace(fx, fy) {
+  if (guessSubmitted) return;
+  currentGuess = { x: fx, y: fy };
+  const px  = gameViewer.toPixel(fx, fy);
+  const pin = document.getElementById('guess-pin');
+  pin.style.left = px.x + 'px';
+  pin.style.top  = px.y + 'px';
+  pin.style.display = 'block';
+  document.getElementById('guess-btn').disabled = false;
+  document.getElementById('map-hint').textContent = window.innerWidth <= 768
+    ? 'Pin placed — tap to move · Confirm to submit'
+    : 'Pin placed — double-click to move · Confirm to submit';
+}
+
+function submitGuess() {
+  if (!currentGuess || guessSubmitted) return;
+  guessSubmitted = true;
+
+  const loc = gameLocations[currentRound];
+  const dx = currentGuess.x - loc.x;
+  const dy = currentGuess.y - loc.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const score = Math.max(0, Math.round(MAX_SCORE * Math.max(0, 1 - dist / 0.4)));
+  totalScore += score;
+  roundScores.push({ loc, dist, score });
+
+  // Update UI (this may change layout)
+  document.getElementById('result-reveal').style.display = 'block';
+  document.getElementById('guess-btn').style.display = 'none';
+  document.getElementById('next-btn').textContent = currentRound + 1 >= gameLocations.length ? 'See Results →' : 'Next Round →';
+  document.getElementById('next-btn').style.display = '';
+  document.getElementById('sidebar-map-wrap').style.cursor = 'crosshair';
+
+  const pct = (dist * 100).toFixed(1);
+  const msg = score >= 900 ? '🎯 Pinpoint!' : score >= 650 ? '👍 Close!' : score >= 350 ? '😅 Not bad' : '📍 Keep practicing';
+  document.getElementById('result-dist').textContent = `${pct}% off`;
+  document.getElementById('result-pts').textContent = `+${score} pts`;
+  document.getElementById('result-msg').textContent = msg;
+  document.getElementById('header-score').textContent = totalScore;
+  document.getElementById('map-hint').textContent = 'Green = correct · Scroll/drag to explore';
+  document.getElementById('progress-bar').style.width = `${((currentRound + 1) / gameLocations.length) * 100}%`;
+
+  // Place pins AFTER layout has settled (requestAnimationFrame ensures paint is done)
+  requestAnimationFrame(() => requestAnimationFrame(() => placePins()));
+}
+
+function nextRound() {
+  currentRound++;
+  if (currentRound >= gameLocations.length) showResults();
+  else loadRound();
+}
+
+// ===================== RESULTS =====================
+
+function showResults() {
+  document.getElementById('progress-bar').style.width = '100%';
+  const total = gameLocations.length * MAX_SCORE;
+  document.getElementById('results-total').textContent = totalScore;
+  document.getElementById('results-denom').textContent = `out of ${total}`;
+  const pct = totalScore / total;
+  const grade = pct >= 0.9 ? 'Perfect run!' : pct >= 0.7 ? 'Great job!' : pct >= 0.5 ? 'Decent run!' : 'Keep practicing!';
+  document.getElementById('results-sub').textContent = grade;
+  document.getElementById('results-breakdown').innerHTML = roundScores.map(r => `
+    <div class="breakdown-row">
+      <img class="breakdown-thumb" src="${r.loc.dataUrl}" alt="">
+      <div class="breakdown-info">
+        <div class="breakdown-name">${r.loc.name}</div>
+        <div class="breakdown-dist">${(r.dist * 100).toFixed(1)}% from target</div>
+      </div>
+      <div class="breakdown-pts">${r.score}</div>
+    </div>
+  `).join('');
+  showScreen('screen-results');
+}
+
+function playAgain() {
+  gameLocations = [...gameLocations].sort(() => Math.random() - 0.5);
+  currentRound = 0; totalScore = 0; roundScores = [];
+  document.getElementById('progress-bar').style.width = '0%';
+  showScreen('screen-game');
+  loadRound();
+}
+
+function backToSetup() { showScreen('screen-setup'); }
+
+// ===================== UTILS =====================
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// Returns the rendered image bounds in viewport coordinates.
+// The modal image uses max-width/max-height so its element rect IS the image rect.
+// The game map image uses width:100% height:100% object-fit:contain so we must
+// compute the letterboxed area manually from the container size.
+function getImageBounds(img) {
+  if (!img.naturalWidth || !img.naturalHeight) return null;
+  const ir = img.getBoundingClientRect();
+  const natAspect = img.naturalWidth / img.naturalHeight;
+  const elAspect  = ir.width / ir.height;
+  // If the element is already sized to the image (modal case), elAspect ≈ natAspect
+  // and the offsets will be ~0. If the element fills the container (game map case),
+  // we compute the letterbox offset.
+  let w, h, left, top;
+  if (natAspect > elAspect) {
+    w = ir.width; h = w / natAspect;
+    left = ir.left; top = ir.top + (ir.height - h) / 2;
+  } else {
+    h = ir.height; w = h * natAspect;
+    top = ir.top; left = ir.left + (ir.width - w) / 2;
+  }
+  return { left, top, width: w, height: h };
+}
+
+function setupDrop(dropId, callback, multi = false, filter = f => f.type.startsWith('image/')) {
+  const drop = document.getElementById(dropId);
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files).filter(filter);
+    if (multi) files.forEach(callback);
+    else if (files[0]) callback(files[0]);
+  });
+}
+
+function fileToDataUrl(file, cb) {
+  const reader = new FileReader();
+  reader.onload = e => cb(e.target.result);
+  reader.readAsDataURL(file);
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ===================== PRESET DATA (injected on export) =====================
+// This block is replaced by exportPreset(). Do not edit manually.
+const PRESET_DATA = null;
+
+// Auto-load preset if present
+(function() {
+  if (!PRESET_DATA) return;
+  // Populate state from preset
+  mapDataUrl = PRESET_DATA.mapDataUrl;
+  document.getElementById('map-preview').src = mapDataUrl;
+  document.getElementById('map-preview-wrap').style.display = 'block';
+  document.getElementById('modal-map-img').src = mapDataUrl;
+  document.getElementById('game-map-img').src = mapDataUrl;
+  locations = PRESET_DATA.locations.map((l, i) => ({ ...l, id: i + 1 }));
+  nextId = locations.length + 1;
+  // Skip straight to game — defer so viewer init below finishes first
+  requestAnimationFrame(startGame);
+})();
+
+// ===================== EXPORT PRESET =====================
+function exportPreset() {
+  const placed = locations.filter(l => l.placed);
+  if (!mapDataUrl || placed.length < 3) return;
+
+  // Serialize the current map + placed locations
+  const presetLocations = placed.map(l => ({
+    name: l.name,
+    dataUrl: l.dataUrl,
+    x: l.x,
+    y: l.y,
+    placed: true
+  }));
+
+  const presetJson = JSON.stringify({ mapDataUrl, locations: presetLocations });
+
+  // Snapshot the DOM *before* showing any toast so the toast isn't baked in
+  const currentHtml = document.documentElement.outerHTML;
+
+  // Inject preset data
+  let exported = currentHtml.replace(
+    /const PRESET_DATA = null;/,
+    'const PRESET_DATA = ' + presetJson + ';'
+  );
+
+  // Remove elements marked as setup-only (e.g. "Edit Locations", "Exit" back buttons)
+  // We do this via string replacement on the HTML so the exported file's DOM is clean.
+  // Replace data-hide-in-preset elements by adding display:none inline.
+  exported = exported.replace(
+    /(<[^>]+data-hide-in-preset[^>]*)(>)/g,
+    '$1 style="display:none"$2'
+  );
+
+  // Also clear any lingering toast text/class that might have been snapshotted
+  exported = exported.replace(
+    /<div id="toast"[^>]*>.*?<\/div>/s,
+    '<div id="toast"></div>'
+  );
+
+  const blob = new Blob([exported], { type: 'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'bespokeguessr-preset.html';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+  toast('Preset exported! ✓');
+}
+
+// ===================== VIEWER INIT =====================
+const modalViewer = new MapViewer(
+  document.getElementById('modal-body'),
+  document.getElementById('modal-panzoom'),
+  document.getElementById('modal-map-img')
+);
+modalViewer.onPlace(onModalPlace);
+modalViewer.onZoomPan(repositionModalPins);
+
+const gameViewer = new MapViewer(
+  document.getElementById('sidebar-map-wrap'),
+  document.getElementById('game-panzoom'),
+  document.getElementById('game-map-img')
+);
+gameViewer.onPlace(onGamePlace);
+gameViewer.onZoomPan(() => { if (currentGuess) requestAnimationFrame(placePins); });
+
+// Fit game map when image loads
+document.getElementById('game-map-img').addEventListener('load', () => {
+  gameViewer.fitToContainer();
+});
+
+// Refit on container resize
+new ResizeObserver(() => {
+  gameViewer.onContainerResize();
+  if (currentGuess) requestAnimationFrame(placePins);
+}).observe(document.getElementById('sidebar-map-wrap'));
+
+// ===================== RESIZABLE SIDEBAR =====================
+(function() {
+  const handle = document.getElementById('resize-handle');
+  const sidebar = document.querySelector('.game-sidebar');
+  const layout  = document.querySelector('.game-layout');
+  let dragging = false;
+  let startX, startWidth, startY, startHeight, isVertical;
+
+  function isMobileLayout() { return window.innerWidth <= 768; }
+
+  function onDragStart(clientX, clientY) {
+    dragging = true;
+    isVertical = isMobileLayout();
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    if (isVertical) {
+      startY = clientY;
+      startHeight = sidebar.offsetHeight;
+      sidebar.style.width = '';
+      document.body.style.cursor = 'row-resize';
+    } else {
+      startX = clientX;
+      startWidth = sidebar.offsetWidth;
+      sidebar.style.height = '';
+      document.body.style.cursor = 'col-resize';
+    }
+  }
+
+  function onDragMove(clientX, clientY) {
+    if (!dragging) return;
+    if (isVertical) {
+      const delta = startY - clientY;
+      const newHeight = Math.min(Math.max(startHeight + delta, 150), layout.offsetHeight * 0.8);
+      sidebar.style.height = newHeight + 'px';
+    } else {
+      const delta = startX - clientX;
+      const newWidth = Math.min(Math.max(startWidth + delta, 200), layout.offsetWidth * 0.7);
+      sidebar.style.width = newWidth + 'px';
+    }
+  }
+
+  function onDragEnd() {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+
+  handle.addEventListener('mousedown', e => { onDragStart(e.clientX, e.clientY); e.preventDefault(); });
+  handle.addEventListener('touchstart', e => { onDragStart(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+  document.addEventListener('mousemove', e => onDragMove(e.clientX, e.clientY));
+  document.addEventListener('touchmove', e => { if (dragging) { onDragMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); } }, { passive: false });
+  document.addEventListener('mouseup', onDragEnd);
+  document.addEventListener('touchend', onDragEnd);
+})();
+</script>
+</body>
+</html>

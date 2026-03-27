@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BespokeGuessr</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0a0b0d;
+    --surface: #111318;
+    --surface2: #1a1d24;
+    --border: #2a2d36;
+    --accent: #e8c84a;
+    --accent2: #4ae8a0;
+    --danger: #e84a4a;
+    --text: #e8e8e8;
+    --muted: #666b7a;
+    --radius: 4px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* HEADER */
+  .header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px; color: var(--accent); }
+  .logo span { color: var(--text); }
+  .header-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 1px; margin-left: auto; }
+
+  /* BUTTONS */
+  .btn {
+    font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 1px;
+    text-transform: uppercase; padding: 10px 20px;
+    border: 1px solid var(--border); background: transparent; color: var(--text);
+    cursor: pointer; border-radius: var(--radius); transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); color: #0a0b0d; border-color: var(--accent); font-weight: 500; }
+  .btn-primary:hover { background: #f0d45a; color: #0a0b0d; border-color: #f0d45a; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); color: var(--text); background: transparent; }
+
+  /* ===================== LOADING / ERROR SCREEN ===================== */
+  #screen-loading { align-items: center; justify-content: center; }
+  .loading-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 48px; text-align: center; max-width: 480px; width: 100%;
+  }
+  .loading-title { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 3px; color: var(--accent); margin-bottom: 12px; }
+  .loading-msg { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .loading-spinner {
+    width: 28px; height: 28px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===================== GAME SCREEN ===================== */
+  #screen-game { flex-direction: column; height: 100vh; overflow: hidden; }
+  .game-layout { flex: 1; display: flex; overflow: hidden; }
+
+  .screenshot-panel { position: relative; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; flex: 1; min-width: 200px; }
+  #game-screenshot { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  .screenshot-overlay {
+    position: absolute; top: 16px; left: 16px;
+    background: rgba(10,11,13,0.85); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 8px 14px;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted);
+  }
+  .screenshot-overlay strong { color: var(--accent); font-size: 20px; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; display: block; }
+
+  .game-sidebar { display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--border); overflow: visible; flex-shrink: 0; width: 380px; min-width: 200px; max-width: 70%; }
+  .sidebar-map-wrap { flex: 1; position: relative; overflow: hidden; cursor: crosshair; background: #000; }
+  #game-map-img { width: 100%; height: 100%; display: block; pointer-events: none; }
+
+  #game-panzoom {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    transform-origin: 0 0;
+  }
+
+  .map-pin {
+    position: absolute; border-radius: 50%; border: 2px solid white;
+    transform: translate(-50%, -50%); pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5); z-index: 10; display: none;
+  }
+  #guess-pin { width: 16px; height: 16px; background: var(--accent); }
+  #answer-pin { width: 14px; height: 14px; background: var(--accent2); z-index: 11; }
+  #answer-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; z-index: 9; }
+
+  .sidebar-footer { padding: 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; overflow: visible; }
+  .score-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .score-val { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 1px; color: var(--accent); }
+  .round-info { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+  .hint-text { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; text-align: center; padding: 4px 0; }
+
+  .result-reveal { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; display: none; }
+  .result-reveal .rdist { font-family: 'Bebas Neue', sans-serif; font-size: 30px; letter-spacing: 2px; color: var(--accent); display: block; line-height: 1; }
+  .result-reveal .rpts { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent2); margin-top: 4px; }
+  .result-reveal .rmsg { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* ===================== RESIZE HANDLE ===================== */
+  #resize-handle {
+    width: 6px;
+    flex-shrink: 0;
+    background: var(--border);
+    cursor: col-resize;
+    position: relative;
+    transition: background 0.15s;
+    z-index: 5;
+  }
+  #resize-handle:hover, #resize-handle.dragging { background: var(--accent); }
+  #resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 32px;
+    background: currentColor;
+    opacity: 0.4;
+    border-radius: 1px;
+  }
+
+  @media (max-width: 768px) {
+    .header { padding: 10px 16px; gap: 8px; }
+    .header-sub { display: none; }
+    .game-layout { flex-direction: column; }
+    .screenshot-panel { min-width: unset; min-height: 120px; }
+    .game-sidebar {
+      width: 100%; min-width: unset; max-width: unset;
+      height: 45vh; min-height: 150px; max-height: 80vh;
+      border-left: none; border-top: 1px solid var(--border);
+    }
+    #resize-handle {
+      width: 100%; height: 6px;
+      cursor: row-resize;
+    }
+    #resize-handle::after {
+      width: 32px; height: 2px;
+    }
+    .results-card { min-width: unset; width: 100%; padding: 28px 20px; border-radius: 0; }
+    .results-score-big { font-size: 56px; }
+  }
+
+  /* ===================== RESULTS SCREEN ===================== */
+  #screen-results { align-items: center; justify-content: center; }
+  .results-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 48px; min-width: 480px; max-width: 600px; text-align: center; }
+  .results-title { font-family: 'Bebas Neue', sans-serif; font-size: 48px; letter-spacing: 4px; color: var(--accent); line-height: 1; margin-bottom: 4px; }
+  .results-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 24px; }
+  .results-score-big { font-family: 'Bebas Neue', sans-serif; font-size: 80px; letter-spacing: 4px; line-height: 1; }
+  .results-score-denom { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--muted); margin-top: 4px; margin-bottom: 28px; }
+  .results-breakdown { display: flex; flex-direction: column; gap: 8px; text-align: left; margin-bottom: 28px; }
+  .breakdown-row { display: flex; align-items: center; gap: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
+  .breakdown-thumb { width: 48px; height: 36px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+  .breakdown-info { flex: 1; }
+  .breakdown-name { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--text); }
+  .breakdown-dist { font-size: 11px; color: var(--muted); }
+  .breakdown-pts { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1px; color: var(--accent); }
+  .results-actions { display: flex; gap: 12px; justify-content: center; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  #toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px;
+    padding: 10px 20px; border-radius: var(--radius); z-index: 9999;
+    transition: transform 0.25s ease; pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<!-- ===================== LOADING / ERROR SCREEN ===================== -->
+<div id="screen-loading" class="screen active">
+  <div class="loading-card">
+    <div id="loading-spinner" class="loading-spinner"></div>
+    <div class="loading-title">BespokeGuessr</div>
+    <div class="loading-msg" id="loading-msg">Loading preset…</div>
+  </div>
+</div>
+
+<!-- ===================== GAME SCREEN ===================== -->
+<div id="screen-game" class="screen">
+  <div class="header" style="padding:12px 24px;">
+    <div class="logo" style="font-size:20px;">Bespoke<span>Guessr</span></div>
+    <div style="flex:1;display:flex;align-items:center;gap:16px;margin-left:24px;">
+      <span class="round-info" id="game-round-label">Round 1 / 5</span>
+      <div style="flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;">
+        <div id="progress-bar" style="height:100%;background:var(--accent);border-radius:2px;transition:width 0.4s ease;width:0%"></div>
+      </div>
+    </div>
+    <div style="margin-left:16px;text-align:right;">
+      <div class="score-label">Total Score</div>
+      <div class="score-val" id="header-score">0</div>
+    </div>
+    <div class="header-sub" id="game-preset-label" style="margin-left:16px;"></div>
+  </div>
+
+  <div class="game-layout">
+    <div class="screenshot-panel">
+      <img id="game-screenshot" src="" alt="">
+      <div id="screenshot-error" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--danger);font-family:'DM Mono',monospace;font-size:13px;text-align:center;">
+        <div style="font-size:28px;">⚠</div>
+        <div>Failed to load image</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="screenshot-error-src"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="screenshot-countdown"></div>
+      </div>
+      <div class="screenshot-overlay">
+        <strong id="round-num-big">1</strong>
+        Where is this?
+      </div>
+    </div>
+
+    <div id="resize-handle"></div>
+    <div class="game-sidebar">
+      <div class="sidebar-map-wrap" id="sidebar-map-wrap">
+        <div id="game-panzoom">
+          <img id="game-map-img" src="" alt="Map">
+        </div>
+        <div id="guess-pin" class="map-pin"></div>
+        <div id="answer-pin" class="map-pin"></div>
+        <canvas id="answer-canvas"></canvas>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="hint-text" id="map-hint">Drag to pan · Tap to place pin</div>
+
+        <div class="result-reveal" id="result-reveal">
+          <span class="rdist" id="result-dist">—</span>
+          <div class="rpts" id="result-pts">+0 points</div>
+          <div class="rmsg" id="result-msg"></div>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" id="guess-btn" onclick="submitGuess()" disabled style="flex:1;">Guess →</button>
+          <button class="btn" id="next-btn" onclick="nextRound()" style="display:none;flex:1;">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== RESULTS SCREEN ===================== -->
+<div id="screen-results" class="screen">
+  <div class="results-card">
+    <div class="results-title">Results</div>
+    <div class="results-sub" id="results-sub">Round complete</div>
+    <div class="results-score-big" id="results-total">0</div>
+    <div class="results-score-denom" id="results-denom">out of 5000</div>
+    <div class="results-breakdown" id="results-breakdown"></div>
+    <div class="results-actions">
+      <button class="btn btn-primary" onclick="playAgain()">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+let presetDir = '';
+let allLocations = [];   // full list loaded from JSON
+let gameLocations = [];  // shuffled for current game
+
+let currentRound = 0;
+let totalScore = 0;
+let roundScores = [];
+let currentGuess = null;
+let guessSubmitted = false;
+let screenshotRetryTimer = null;
+
+const MAX_SCORE = 1000;
+
+// ===================== PAN/ZOOM MAP VIEWER =====================
+class MapViewer {
+  constructor(container, panzoomEl, imgEl) {
+    this.container = container;
+    this.el        = panzoomEl;
+    this.img       = imgEl;
+    this.scale     = 1;
+    this.ox        = 0;
+    this.oy        = 0;
+    this._dragging = false;
+    this._lastX    = 0;
+    this._lastY    = 0;
+    this._bind();
+  }
+
+  fitToContainer() {
+    const cr  = this.container.getBoundingClientRect();
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    if (!nat.w || !nat.h || !cr.width || !cr.height) return;
+    const scaleToFit = Math.min(cr.width / nat.w, cr.height / nat.h);
+    this.scale = scaleToFit;
+    this.ox    = (cr.width  - nat.w * scaleToFit) / 2;
+    this.oy    = (cr.height - nat.h * scaleToFit) / 2;
+    this._apply();
+  }
+
+  toFraction(cx, cy) {
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    const ix  = (cx - this.ox) / this.scale;
+    const iy  = (cy - this.oy) / this.scale;
+    return { x: ix / nat.w, y: iy / nat.h };
+  }
+
+  toPixel(fx, fy) {
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    return {
+      x: this.ox + fx * nat.w * this.scale,
+      y: this.oy + fy * nat.h * this.scale
+    };
+  }
+
+  _apply() {
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    this.el.style.width  = nat.w + 'px';
+    this.el.style.height = nat.h + 'px';
+    this.el.style.transform = `translate(${this.ox}px, ${this.oy}px) scale(${this.scale})`;
+  }
+
+  _clampOffset() {
+    const cr  = this.container.getBoundingClientRect();
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    const iw  = nat.w * this.scale;
+    const ih  = nat.h * this.scale;
+    const margin = 40;
+    this.ox = Math.min(this.ox, cr.width  - margin);
+    this.ox = Math.max(this.ox, margin - iw);
+    this.oy = Math.min(this.oy, cr.height - margin);
+    this.oy = Math.max(this.oy, margin - ih);
+  }
+
+  _bind() {
+    const c = this.container;
+
+    c.addEventListener('wheel', e => {
+      e.preventDefault();
+      const cr     = c.getBoundingClientRect();
+      const mouseX = e.clientX - cr.left;
+      const mouseY = e.clientY - cr.top;
+      const delta  = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const newScale = Math.min(Math.max(this.scale * delta, 0.2), 20);
+      this.ox = mouseX - (mouseX - this.ox) * (newScale / this.scale);
+      this.oy = mouseY - (mouseY - this.oy) * (newScale / this.scale);
+      this.scale = newScale;
+      this._clampOffset();
+      this._apply();
+      if (this._onZoomPan) this._onZoomPan();
+    }, { passive: false });
+
+    c.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      this._dragging = true;
+      this._lastX    = e.clientX;
+      this._lastY    = e.clientY;
+      this._startX   = e.clientX;
+      this._startY   = e.clientY;
+      this._moved    = false;
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!this._dragging) return;
+      const dx = e.clientX - this._lastX;
+      const dy = e.clientY - this._lastY;
+      const totalDx = e.clientX - this._startX;
+      const totalDy = e.clientY - this._startY;
+      if (!this._moved && Math.sqrt(totalDx * totalDx + totalDy * totalDy) > 4) {
+        this._moved = true;
+        c.style.cursor = 'grabbing';
+      }
+      if (!this._moved) return;
+      this.ox += dx;
+      this.oy += dy;
+      this._lastX = e.clientX;
+      this._lastY = e.clientY;
+      this._clampOffset();
+      this._apply();
+      if (this._onZoomPan) this._onZoomPan();
+    });
+    document.addEventListener('mouseup', () => {
+      if (!this._dragging) return;
+      this._dragging = false;
+      this._moved    = false;
+      c.style.cursor = 'crosshair';
+    });
+
+    c.addEventListener('dblclick', e => {
+      const cr = c.getBoundingClientRect();
+      const cx = e.clientX - cr.left;
+      const cy = e.clientY - cr.top;
+      const f  = this.toFraction(cx, cy);
+      if (f.x < 0 || f.y < 0 || f.x > 1 || f.y > 1) return;
+      if (this._onPlace) this._onPlace(f.x, f.y);
+    });
+
+    // Touch: single-finger pan, two-finger pinch-zoom, tap to place pin
+    let _pinchDist = null;
+    c.addEventListener('touchstart', e => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        this._dragging = true;
+        this._lastX  = e.touches[0].clientX;
+        this._lastY  = e.touches[0].clientY;
+        this._startX = e.touches[0].clientX;
+        this._startY = e.touches[0].clientY;
+        this._moved  = false;
+      } else if (e.touches.length === 2) {
+        this._dragging = false;
+        _pinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    }, { passive: false });
+
+    c.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (e.touches.length === 1 && this._dragging) {
+        const dx = e.touches[0].clientX - this._lastX;
+        const dy = e.touches[0].clientY - this._lastY;
+        if (!this._moved && Math.hypot(
+          e.touches[0].clientX - this._startX,
+          e.touches[0].clientY - this._startY
+        ) > 4) this._moved = true;
+        if (this._moved) {
+          this.ox += dx; this.oy += dy;
+          this._clampOffset(); this._apply();
+          if (this._onZoomPan) this._onZoomPan();
+        }
+        this._lastX = e.touches[0].clientX;
+        this._lastY = e.touches[0].clientY;
+      } else if (e.touches.length === 2 && _pinchDist !== null) {
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const cr   = c.getBoundingClientRect();
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - cr.left;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - cr.top;
+        const ratio = dist / _pinchDist;
+        const newScale = Math.min(Math.max(this.scale * ratio, 0.2), 20);
+        this.ox = midX - (midX - this.ox) * (newScale / this.scale);
+        this.oy = midY - (midY - this.oy) * (newScale / this.scale);
+        this.scale = newScale;
+        _pinchDist = dist;
+        this._clampOffset(); this._apply();
+        if (this._onZoomPan) this._onZoomPan();
+      }
+    }, { passive: false });
+
+    c.addEventListener('touchend', e => {
+      if (this._dragging && !this._moved) {
+        const cr    = c.getBoundingClientRect();
+        const touch = e.changedTouches[0];
+        const f     = this.toFraction(touch.clientX - cr.left, touch.clientY - cr.top);
+        if (f.x >= 0 && f.y >= 0 && f.x <= 1 && f.y <= 1) {
+          if (this._onPlace) this._onPlace(f.x, f.y);
+        }
+      }
+      this._dragging = false;
+      this._moved    = false;
+      _pinchDist     = null;
+    });
+  }
+
+  onPlace(fn)   { this._onPlace   = fn; }
+  onZoomPan(fn) { this._onZoomPan = fn; }
+
+  onContainerResize() {
+    if (this.scale <= this._fitScale() * 1.01) {
+      this.fitToContainer();
+    } else {
+      this._clampOffset();
+      this._apply();
+    }
+  }
+
+  _fitScale() {
+    const cr  = this.container.getBoundingClientRect();
+    const nat = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    if (!nat.w || !cr.width) return 1;
+    return Math.min(cr.width / nat.w, cr.height / nat.h);
+  }
+}
+
+// ===================== INIT =====================
+
+function getPresetName() {
+  // Use the last non-empty, non-html path segment as the display name
+  // e.g. /arc_raiders/ → "Arc Raiders"
+  const parts = window.location.pathname.split('/').filter(p => p && !p.endsWith('.html'));
+  return parts.length > 0 ? formatLabel(parts[parts.length - 1]) : 'BespokeGuessr';
+}
+
+function formatLabel(key) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function showError(msg) {
+  document.getElementById('loading-spinner').style.display = 'none';
+  document.getElementById('loading-msg').innerHTML = msg;
+}
+
+async function init() {
+  // Files are co-located in the same directory as this index.html
+  presetDir = '.';
+
+  let data;
+  try {
+    const resp = await fetch('locations.json');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} — ${resp.statusText}`);
+    data = await resp.json();
+  } catch (e) {
+    showError(`Failed to load locations.json<br><br>${e.message}`);
+    return;
+  }
+
+  allLocations = Object.entries(data).map(([key, val]) => ({
+    name: key,
+    label: val.label || formatLabel(key),
+    // Support explicit image filename in JSON; otherwise default to key.png
+    imageSrc: val.image || key + '.png',
+    x: val.x,
+    y: val.y,
+  }));
+
+  if (allLocations.length < 3) {
+    showError(`Only ${allLocations.length} location(s) found in locations.json. Need at least 3.`);
+    return;
+  }
+
+  const presetName = getPresetName();
+  document.title = `BespokeGuessr — ${presetName}`;
+  document.getElementById('game-preset-label').textContent = presetName;
+
+  // Show the game screen first so the sidebar container has real layout dimensions,
+  // then set the map src. fitToContainer fires via the load listener below.
+  showScreen('screen-game');
+
+  const mapImg = document.getElementById('game-map-img');
+  mapImg.onerror = () => {
+    if (mapImg.src.endsWith('map.png')) {
+      mapImg.src = 'map.jpg';
+    } else {
+      showScreen('screen-loading');
+      showError('Could not load map — expected map.png or map.jpg');
+    }
+  };
+  mapImg.src = 'map.png';
+}
+
+// ===================== GAME =====================
+
+function startGame() {
+  gameLocations = [...allLocations].sort(() => Math.random() - 0.5);
+  currentRound = 0;
+  totalScore = 0;
+  roundScores = [];
+  document.getElementById('progress-bar').style.width = '0%';
+  loadRound();
+}
+
+function loadRound() {
+  const loc = gameLocations[currentRound];
+  currentGuess = null;
+  guessSubmitted = false;
+
+  // Lazy-load only this round's location image, with auto-retry on failure
+  if (screenshotRetryTimer) { clearTimeout(screenshotRetryTimer); screenshotRetryTimer = null; }
+  const screenshotEl  = document.getElementById('game-screenshot');
+  const screenshotErr = document.getElementById('screenshot-error');
+  screenshotEl.style.display = '';
+  screenshotErr.style.display = 'none';
+  screenshotEl.onload = () => {
+    screenshotEl.style.display = '';
+    screenshotErr.style.display = 'none';
+  };
+  screenshotEl.onerror = () => {
+    screenshotEl.style.display = 'none';
+    document.getElementById('screenshot-error-src').textContent = loc.imageSrc;
+    screenshotErr.style.display = 'flex';
+    let secs = 3;
+    const tick = () => {
+      if (secs > 0) {
+        document.getElementById('screenshot-countdown').textContent = `Retrying in ${secs}s…`;
+        secs--;
+        screenshotRetryTimer = setTimeout(tick, 1000);
+      } else {
+        document.getElementById('screenshot-countdown').textContent = 'Retrying…';
+        screenshotEl.src = loc.imageSrc + '?r=' + Date.now();
+      }
+    };
+    tick();
+  };
+  screenshotEl.src = loc.imageSrc;
+
+  gameViewer.fitToContainer();
+  document.getElementById('round-num-big').textContent = currentRound + 1;
+  document.getElementById('game-round-label').textContent = `Round ${currentRound + 1} / ${gameLocations.length}`;
+  document.getElementById('header-score').textContent = totalScore;
+  document.getElementById('guess-btn').disabled = true;
+  document.getElementById('guess-btn').style.display = '';
+  document.getElementById('next-btn').style.display = 'none';
+  document.getElementById('result-reveal').style.display = 'none';
+  document.getElementById('map-hint').textContent = window.innerWidth <= 768
+    ? 'Pinch to zoom · Drag to pan · Tap to place pin'
+    : 'Scroll to zoom · Drag to pan · Double-click to place pin';
+  document.getElementById('guess-pin').style.display = 'none';
+  document.getElementById('answer-pin').style.display = 'none';
+  document.getElementById('answer-canvas').style.display = 'none';
+  document.getElementById('sidebar-map-wrap').style.cursor = 'crosshair';
+}
+
+function placePins() {
+  if (!currentGuess) return;
+
+  const gPx  = gameViewer.toPixel(currentGuess.x, currentGuess.y);
+  const gPin = document.getElementById('guess-pin');
+  gPin.style.left = gPx.x + 'px';
+  gPin.style.top  = gPx.y + 'px';
+
+  if (guessSubmitted) {
+    const loc = gameLocations[currentRound];
+    if (!loc) return;
+
+    const aPx  = gameViewer.toPixel(loc.x, loc.y);
+    const aPin = document.getElementById('answer-pin');
+    aPin.style.left = aPx.x + 'px';
+    aPin.style.top  = aPx.y + 'px';
+    aPin.style.display = 'block';
+
+    const wrap   = document.getElementById('sidebar-map-wrap');
+    const wr     = wrap.getBoundingClientRect();
+    const canvas = document.getElementById('answer-canvas');
+    canvas.width  = wr.width;
+    canvas.height = wr.height;
+    canvas.style.display = 'block';
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(74,232,160,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(gPx.x, gPx.y);
+    ctx.lineTo(aPx.x, aPx.y);
+    ctx.stroke();
+  }
+}
+
+function onGamePlace(fx, fy) {
+  if (guessSubmitted) return;
+  currentGuess = { x: fx, y: fy };
+  const px  = gameViewer.toPixel(fx, fy);
+  const pin = document.getElementById('guess-pin');
+  pin.style.left = px.x + 'px';
+  pin.style.top  = px.y + 'px';
+  pin.style.display = 'block';
+  document.getElementById('guess-btn').disabled = false;
+  document.getElementById('map-hint').textContent = window.innerWidth <= 768
+    ? 'Pin placed — tap to move · Confirm to submit'
+    : 'Pin placed — double-click to move · Confirm to submit';
+}
+
+function submitGuess() {
+  if (!currentGuess || guessSubmitted) return;
+  guessSubmitted = true;
+
+  const loc = gameLocations[currentRound];
+  const dx = currentGuess.x - loc.x;
+  const dy = currentGuess.y - loc.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const score = Math.max(0, Math.round(MAX_SCORE * Math.max(0, 1 - dist / 0.4)));
+  totalScore += score;
+  roundScores.push({ loc, dist, score });
+
+  document.getElementById('result-reveal').style.display = 'block';
+  document.getElementById('guess-btn').style.display = 'none';
+  document.getElementById('next-btn').textContent = currentRound + 1 >= gameLocations.length ? 'See Results →' : 'Next Round →';
+  document.getElementById('next-btn').style.display = '';
+  document.getElementById('sidebar-map-wrap').style.cursor = 'crosshair';
+
+  const pct = (dist * 100).toFixed(1);
+  const msg = score >= 900 ? '🎯 Pinpoint!' : score >= 650 ? '👍 Close!' : score >= 350 ? '😅 Not bad' : '📍 Keep practicing';
+  document.getElementById('result-dist').textContent = `${pct}% off`;
+  document.getElementById('result-pts').textContent = `+${score} pts`;
+  document.getElementById('result-msg').textContent = msg;
+  document.getElementById('header-score').textContent = totalScore;
+  document.getElementById('map-hint').textContent = 'Green = correct · Scroll/drag to explore';
+  document.getElementById('progress-bar').style.width = `${((currentRound + 1) / gameLocations.length) * 100}%`;
+
+  requestAnimationFrame(() => requestAnimationFrame(() => placePins()));
+}
+
+function nextRound() {
+  currentRound++;
+  if (currentRound >= gameLocations.length) showResults();
+  else loadRound();
+}
+
+// ===================== RESULTS =====================
+
+function showResults() {
+  document.getElementById('progress-bar').style.width = '100%';
+  const total = gameLocations.length * MAX_SCORE;
+  document.getElementById('results-total').textContent = totalScore;
+  document.getElementById('results-denom').textContent = `out of ${total}`;
+  const pct = totalScore / total;
+  const grade = pct >= 0.9 ? 'Perfect run!' : pct >= 0.7 ? 'Great job!' : pct >= 0.5 ? 'Decent run!' : 'Keep practicing!';
+  document.getElementById('results-sub').textContent = grade;
+  document.getElementById('results-breakdown').innerHTML = roundScores.map(r => `
+    <div class="breakdown-row">
+      <img class="breakdown-thumb" src="${r.loc.imageSrc}" alt="">
+      <div class="breakdown-info">
+        <div class="breakdown-name">${r.loc.label}</div>
+        <div class="breakdown-dist">${(r.dist * 100).toFixed(1)}% from target</div>
+      </div>
+      <div class="breakdown-pts">${r.score}</div>
+    </div>
+  `).join('');
+  showScreen('screen-results');
+}
+
+function playAgain() {
+  gameLocations = [...allLocations].sort(() => Math.random() - 0.5);
+  currentRound = 0; totalScore = 0; roundScores = [];
+  document.getElementById('progress-bar').style.width = '0%';
+  showScreen('screen-game');
+  loadRound();
+}
+
+// ===================== UTILS =====================
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ===================== VIEWER INIT =====================
+const gameViewer = new MapViewer(
+  document.getElementById('sidebar-map-wrap'),
+  document.getElementById('game-panzoom'),
+  document.getElementById('game-map-img')
+);
+gameViewer.onPlace(onGamePlace);
+gameViewer.onZoomPan(() => { if (currentGuess) requestAnimationFrame(placePins); });
+
+document.getElementById('game-map-img').addEventListener('load', () => {
+  gameViewer.fitToContainer();
+  // Only auto-start once (map src doesn't change between replays)
+  if (gameLocations.length === 0) startGame();
+});
+
+new ResizeObserver(() => {
+  gameViewer.onContainerResize();
+  if (currentGuess) requestAnimationFrame(placePins);
+}).observe(document.getElementById('sidebar-map-wrap'));
+
+// ===================== RESIZABLE SIDEBAR =====================
+(function() {
+  const handle  = document.getElementById('resize-handle');
+  const sidebar = document.querySelector('.game-sidebar');
+  const layout  = document.querySelector('.game-layout');
+  let dragging = false;
+  let startX, startWidth, startY, startHeight, isVertical;
+
+  function isMobileLayout() { return window.innerWidth <= 768; }
+
+  function onDragStart(clientX, clientY) {
+    dragging = true;
+    isVertical = isMobileLayout();
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    if (isVertical) {
+      startY = clientY;
+      startHeight = sidebar.offsetHeight;
+      sidebar.style.width = '';
+      document.body.style.cursor = 'row-resize';
+    } else {
+      startX = clientX;
+      startWidth = sidebar.offsetWidth;
+      sidebar.style.height = '';
+      document.body.style.cursor = 'col-resize';
+    }
+  }
+
+  function onDragMove(clientX, clientY) {
+    if (!dragging) return;
+    if (isVertical) {
+      const delta = startY - clientY;
+      const newHeight = Math.min(Math.max(startHeight + delta, 150), layout.offsetHeight * 0.8);
+      sidebar.style.height = newHeight + 'px';
+    } else {
+      const delta = startX - clientX;
+      const newWidth = Math.min(Math.max(startWidth + delta, 200), layout.offsetWidth * 0.7);
+      sidebar.style.width = newWidth + 'px';
+    }
+  }
+
+  function onDragEnd() {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+
+  handle.addEventListener('mousedown', e => { onDragStart(e.clientX, e.clientY); e.preventDefault(); });
+  handle.addEventListener('touchstart', e => { onDragStart(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+  document.addEventListener('mousemove', e => onDragMove(e.clientX, e.clientY));
+  document.addEventListener('touchmove', e => { if (dragging) { onDragMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); } }, { passive: false });
+  document.addEventListener('mouseup', onDragEnd);
+  document.addEventListener('touchend', onDragEnd);
+})();
+
+// ===================== BOOT =====================
+init();
+</script>
+</body>
+</html>
